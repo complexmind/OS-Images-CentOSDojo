@@ -1,0 +1,37 @@
+#!/bin/bash
+
+hostname=dojodemo
+domain=s01.lab
+ip=$(hostname  -I | cut -f1 -d' ')
+ipaserver=192.168.32.2
+secns=192.168.32.1
+enrolpass=d0j0rules
+
+# configure hostname properly
+perl -pi -e "s/HOSTNAME=.*/HOSTNAME=$hostname.$domain/" /etc/sysconfig/network
+hostname $hostname.$domain
+
+# configure /etc/hosts
+grep -v $ip /etc/hosts > /etc/hosts.new
+echo "$ip $hostname.$domain $hostname" >>/etc/hosts.new
+mv -f /etc/hosts.new /etc/hosts
+
+# configure /etc/resolv.conf
+cat <<EOF >/etc/resolv.conf
+search $domain
+nameserver $ipaserver
+nameserver $secns
+EOF
+
+# install and configure ipa-client
+yum -y install ipa-client
+
+ipa-client-install -N -p admin -w $enrolpass \
+                   --enable-dns-updates \
+                   --mkhomedir \
+                   --unattended
+
+# configure host for authorized_keys lookup via sss
+echo 'AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys' >>/etc/ssh/sshd_config
+service sshd restart
+
